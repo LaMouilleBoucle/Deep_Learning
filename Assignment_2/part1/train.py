@@ -1,8 +1,8 @@
 ################################################################################
 # MIT License
-# 
+#
 # Copyright (c) 2019
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
@@ -25,10 +25,11 @@ import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
-from part1.dataset import PalindromeDataset
-from part1.vanilla_rnn import VanillaRNN
-from part1.lstm import LSTM
+from dataset import PalindromeDataset
+from vanilla_rnn import VanillaRNN
+from lstm import LSTM
 
 # You may want to look into tensorboard for logging
 # from torch.utils.tensorboard import SummaryWriter
@@ -40,38 +41,51 @@ def train(config):
     assert config.model_type in ('RNN', 'LSTM')
 
     # Initialize the device which to run the model on
-    device = torch.device(config.device)
+    device = torch.device(config.device if torch.cuda.is_available() else 'cpu')
 
     # Initialize the model that we are going to use
-    model = None  # fixme
+    T = config.input_length
+    D = config.input_dim
+    H = config.num_hidden
+    K = config.num_classes
+    model = VanillaRNN(T,D,H,K).to(device) if config.model_type=='RNN' else LSTM(T,D,H,K).to(device)
 
     # Initialize the dataset and data loader (note the +1)
     dataset = PalindromeDataset(config.input_length+1)
     data_loader = DataLoader(dataset, config.batch_size, num_workers=1)
 
     # Setup the loss and optimizer
-    criterion = None  # fixme
-    optimizer = None  # fixme
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.RMSprop(model.parameters(), config.learning_rate)
 
+    writer = SummaryWriter("./runs/VanillaRNN")
     for step, (batch_inputs, batch_targets) in enumerate(data_loader):
 
         # Only for time measurement of step through network
         t1 = time.time()
 
         # Add more code here ...
+        x = batch_inputs.to(device)
+        y = batch_targets.to(device)
 
+        optimizer.zero_grad()
+        out = model.forward(x)
+        loss = criterion(out, y)
+        loss.backward()
         ############################################################################
         # QUESTION: what happens here and why?
+        # ANSWER: Gradients are clipped to a smaller magnitude, to prevent them
+        # from exploding in the lower layers as a result of the chain rule.
         ############################################################################
-        torch.nn.utils.clip_grad_norm(model.parameters(), max_norm=config.max_norm)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_norm)
         ############################################################################
 
         # Add more code here ...
-
-        loss = np.inf   # fixme
-        accuracy = 0.0  # fixme
+        optimizer.step()
+        accuracy = torch.sum((out.argmax(dim=1) == y).float()) / x.size(0)
 
         # Just for time measurement
+        time.sleep(0.0000001)
         t2 = time.time()
         examples_per_second = config.batch_size/float(t2-t1)
 
@@ -83,13 +97,28 @@ def train(config):
                     config.train_steps, config.batch_size, examples_per_second,
                     accuracy, loss
             ))
+            writer.add_scalar('Loss/train', loss, step)
+            writer.add_scalar('Accuracy/train', accuracy, step)
 
         if step == config.train_steps:
             # If you receive a PyTorch data-loader error, check this bug report:
             # https://github.com/pytorch/pytorch/pull/9655
+
+            test_dataset = PalindromeDataset(config.input_length+1)
+            test_data_loader = DataLoader(test_dataset, config.batch_size, num_workers=1)
+
+            x_test, y_test = next(iter(test_data_loader))
+            out_test = model.forward(x_test)
+            loss_test = criterion(out_test, y_test)
+            accuracy_test = torch.sum((out_test.argmax(dim=1) == y_test).float())/ x_test.size(0)
+
+            writer.add_scalar('Accuarcy/test', accuracy_test, step)
+            writer.add_text('T', 'T=%i' %(config.input_length+1), step)
             break
 
+    writer.close()
     print('Done training.')
+    print('\nThe loss on the test set is %f and the accuracy is %f\n' %(loss_test, accuracy_test))
 
 
  ################################################################################
