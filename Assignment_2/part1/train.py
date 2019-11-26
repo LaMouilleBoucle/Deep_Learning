@@ -58,7 +58,9 @@ def train(config):
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.RMSprop(model.parameters(), config.learning_rate)
 
-    writer = SummaryWriter("./runs/VanillaRNN")
+    accuracies_train = 0
+    grad_norms = 0
+    #writer = SummaryWriter("./runs/VanillaRNN")
     for step, (batch_inputs, batch_targets) in enumerate(data_loader):
 
         # Only for time measurement of step through network
@@ -72,6 +74,7 @@ def train(config):
         out = model.forward(x)
         loss = criterion(out, y)
         loss.backward()
+
         ############################################################################
         # QUESTION: what happens here and why?
         # ANSWER: Gradients are clipped to a smaller magnitude, to prevent them
@@ -97,29 +100,31 @@ def train(config):
                     config.train_steps, config.batch_size, examples_per_second,
                     accuracy, loss
             ))
-            writer.add_scalar('Loss/train', loss, step)
-            writer.add_scalar('Accuracy/train', accuracy, step)
+            accuracies_train += accuracy
+            grad_norms += model.h_init.grad.norm()
+
+            # writer.add_scalar('Loss/train', loss, step)
+            # writer.add_scalar('Accuracy/train', accuracy, step)
 
         if step == config.train_steps:
             # If you receive a PyTorch data-loader error, check this bug report:
             # https://github.com/pytorch/pytorch/pull/9655
 
-            test_dataset = PalindromeDataset(config.input_length+1)
-            test_data_loader = DataLoader(test_dataset, config.batch_size, num_workers=1)
-
-            x_test, y_test = next(iter(test_data_loader))
-            out_test = model.forward(x_test)
-            loss_test = criterion(out_test, y_test)
-            accuracy_test = torch.sum((out_test.argmax(dim=1) == y_test).float())/ x_test.size(0)
-
-            writer.add_scalar('Accuarcy/test', accuracy_test, step)
-            writer.add_text('T', 'T=%i' %(config.input_length+1), step)
+            # test_dataset = PalindromeDataset(config.input_length+1)
+            # test_data_loader = DataLoader(test_dataset, config.batch_size, num_workers=1)
+            #
+            # x_test, y_test = next(iter(test_data_loader))
+            # out_test = model.forward(x_test)
+            #
+            # accuracy_test = torch.sum((out_test.argmax(dim=1) == y_test).float())/ x_test.size(0)
+            # writer.add_scalar('Accuarcy/test', accuracy_test, step)
+            # writer.add_text('T', 'T=%i' %(config.input_length+1), step)
             break
 
-    writer.close()
+    #writer.close()
     print('Done training.')
-    print('\nThe loss on the test set is %f and the accuracy is %f\n' %(loss_test, accuracy_test))
-
+    print('\nThe accuracy on the test set is %f.\n' %(accuracy_test))
+    return (accuracies_train*10)/step, (grad_norms*10)/step
 
  ################################################################################
  ################################################################################
