@@ -41,13 +41,13 @@ class VanillaRNN(nn.Module):
         for W in [self.W_hx, self.W_hh, self.W_ph]: nn.init.xavier_uniform_(W)
         for b in [self.b_h, self.b_p]: nn.init.zeros_(b)
 
-        self.h_init = torch.zeros(self.W_hh.size(0), requires_grad=True)
+        self.h_init = torch.zeros(self.W_hh.size(0), requires_grad=True).to(device)
+        self.h_list = []
 
     def forward(self, x):
         # Implementation here ...
 
         h = self.h_init
-        #h = torch.zeros(self.W_hh.size(0), requires_grad=True)
         if self.W_hx.size(0) == self.b_p.size(0):
             x = F.one_hot(x.long()).float()
         else:
@@ -55,15 +55,7 @@ class VanillaRNN(nn.Module):
 
         for t in range(self.seq_length):
             h = torch.tanh(x[:,t]@self.W_hx + h@self.W_hh + self.b_h)
-
-        # if self.W_hx.size(0) == self.b_p.size(0):
-        #     for t in range(self.seq_length):
-        #         x_one_hot = F.one_hot(x[:,t].long(), self.b_p.size(0)).float()
-        #         h = torch.tanh(x_one_hot@self.W_hx + h@self.W_hh + self.b_h)
-        # else:
-        #     for t in range(self.seq_length):
-        #         x_dense = x[:,t].view(-1, 1)
-        #         h = torch.tanh(x_dense@self.W_hx + h@self.W_hh + self.b_h)
+            self.h_list += [h.requires_grad_(True)]
 
         out = h@self.W_ph + self.b_p
 

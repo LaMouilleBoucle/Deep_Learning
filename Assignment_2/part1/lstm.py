@@ -65,7 +65,8 @@ class LSTM(nn.Module):
         for b in [self.b_g, self.b_i, self.b_o,\
                   self.b_p]: nn.init.zeros_(b)
 
-        self.h_init = torch.zeros(self.W_gh.size(0), requires_grad=True)
+        self.h_init = torch.zeros(self.W_gh.size(0), requires_grad=True).to(device)
+        self.h_list = []
 
     def forward(self, x):
         # Implementation here ...
@@ -86,6 +87,7 @@ class LSTM(nn.Module):
             o = torch.sigmoid(x[:,t]@self.W_ox + h@self.W_oh + self.b_o)
             c = g*i + c*f
             h = torch.tanh(c*o)
+            self.h_list += [h.requires_grad_(True)]
 
         out = h@self.W_ph + self.b_p
 
